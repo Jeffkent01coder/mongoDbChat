@@ -60,6 +60,8 @@ app.post("/messages", async (req, res) => {
     res.status(500).json({ error: "Failed to send message" });
   }
 });
+
+
 app.get("/messages/:sender/:receiver", async (req, res) => {
   const { sender, receiver } = req.params; // Destructure sender and receiver from req.params
   try {
@@ -84,27 +86,41 @@ app.get("/messages/:sender/:receiver", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
-// Search conversation by sender and receiver and return the conversation ID
-app.get("/conversations/search", async (req, res) => {
-  const { sender, receiver } = req.query;
 
-  if (!sender || !receiver) {
-    return res
-      .status(400)
-      .json({ error: "Sender and receiver parameters are required" });
-  }
+app.get("/conversations/search/:id", async (req, res) => {
+  const { id } = req.params;
+
+  console.log("Id is: ", id);
 
   try {
-    // Find conversation by sender and receiver
-    const conversation = await Conversation.findOne({
-      members: { $all: [sender, receiver] },
-    });
+    // Find conversation where either member has the ID
+    const conversations = await Conversation.find({
+      members: id, // Check if the ID is in the members array
+    })
+      .sort({ createdAt: -1 })
+      .populate("messages")
+      .exec(); // Sort by latest conversation and populate messages
+    console.log("Conversations are: ", conversations);
 
-    if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
-    }
+    const chats = []
 
-    res.status(200).json({ conversationId: conversation._id });
+    if(conversations.length !== 0) {
+      for(const conversation of conversations) {
+        // Find the other member apart from the ID
+        const otherMember = conversation.members.find((member) => member !== id);
+
+        // Get the last message in the conversation
+        const lastMessageId = conversation.messages[conversation.messages.length - 1];
+        const messageObject = await Message.findById(lastMessageId);
+        const lastMessage = messageObject.message;
+
+        chats.push({
+          otherMember,
+          lastMessage
+        })
+      }
+    }    
+    res.status(200).json(chats);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to search for conversation" });
